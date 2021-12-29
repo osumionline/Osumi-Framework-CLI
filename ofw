@@ -1,0 +1,97 @@
+#!/bin/bash
+
+# CLI VARIABLES
+SCRIPT_DIR="$( pwd )"
+CLI_FILE="${SCRIPT_DIR}/ofw/vendor/cli/cli.php"
+VERSION="0.1"
+VERSION_URL="https://raw.githubusercontent.com/igorosabel/Osumi-Framework-CLI/master/VERSION"
+OFW_URL="https://raw.githubusercontent.com/igorosabel/Osumi-Framework-CLI/master/ofw"
+
+# CLI INTERNAL FUNCTIONS
+
+# Initialize a tool, php, regardless it is an alias, a builtin, an executable...
+setupTool() {
+	local tool=$1
+	if ! [[ $tool =~ ^[[:alnum:]._-]+$ ]]; then
+		echo "Malicious input: '$tool'" >&2
+		return 1
+	fi
+	case "$( /bin/bash -ic "type -t $tool" )" in
+		alias)
+			shopt -s expand_aliases
+			eval "$( /bin/bash -ic "alias $tool" )"
+			;;
+		function)
+			eval "$( /bin/bash -ic "declare -f $tool" )"
+			;;
+		file|builtin|keyword)
+			: ;; # no-op
+		*)  echo "error: don't know about $tool" >&1
+			return 1
+			;;
+	esac
+}
+
+# Generate a slug based on a text
+slugify () {
+	slug_result="$(echo -n "$@" | sed -e 's/[^[:alnum:]]/-/g' | tr -s '-' | tr A-Z a-z)"
+}
+
+# Compare version number strings
+verlte() {
+	[  "$1" = "`echo -e "$1\n$2" | sort -V | head -n1`" ]
+}
+
+verlt() {
+	[ "$1" = "$2" ] && return 1 || verlte $1 $2
+}
+
+# INITIALIZE PHP
+
+setupTool php || exit 1
+
+# MAIN
+
+case "$1" in
+	new)
+		slug_result=''
+		slugify $2
+		echo "Downloading Osumi Framework GitHub repository..."
+		eval "$( git clone https://github.com/igorosabel/Osumi-Framework.git $slug_result )"
+		CLI_FILE="${SCRIPT_DIR}/${slug_result}/ofw/vendor/cli/cli.php"
+		echo "Cleaning repository example data..."
+		php $CLI_FILE reset silent
+		echo ""
+		echo "Done! An Osumi Framework application has been created with the name $slug_result"
+	;;
+	cliUpdateCheck)
+		version_check="$( curl -s $VERSION_URL )"
+		if [ verlte $VERSION $version_check ]
+		then
+			echo "CLI update avaliable: $version_check. Run ofw cliUpdate (as root or with sudo) to perform the update"
+		else
+			echo "You are up to date! Current version is: $VERSION"
+		fi
+	;;
+	cliUpdate)
+		if [[ $(id -u) -ne 0 ]] ; then echo "Please run as root or sudo" ; exit 1 ; fi
+		version_check="$( curl -s $VERSION_URL )"
+		if [ verlte $VERSION $version_check ]
+		then
+			new_ofw="$( curl -s $OFW_URL )"
+			rm /usr/local/bin/ofw
+			echo "$new_ofw" >> /usr/local/bin/ofw
+			chmod 755 /usr/local/bin/ofw
+			echo  "OFW CLI updated to version $version_check"
+		else
+			echo "You are up to date! Current version is: $VERSION"
+		fi
+	;;
+	*)
+		if test -f "$CLI_FILE"; then
+			php $CLI_FILE $@
+		else
+			echo "ERROR: OFW CLI must be run in a OFW project folder."
+		fi
+	;;
+esac
