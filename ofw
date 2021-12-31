@@ -54,6 +54,11 @@ setupTool php || exit 1
 
 case "$1" in
 	new)
+		if [ $# -lt 2 ]; then
+			echo "You have to specify the new project's name. Eg:"
+			echo "  ofw new projectName"
+			exit 1
+		fi
 		slug_result=''
 		slugify $2
 		echo "Downloading Osumi Framework GitHub repository..."
